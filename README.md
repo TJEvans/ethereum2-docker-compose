@@ -17,9 +17,13 @@ Setup | Beacon | Staking | Monitoring
 <sub><sup>Sorted by name (ascending).</sup></sub>
 
 ## Testnet or Mainnet
-**You are viewing this repository with configuration for Mainnet**
+**You are viewing this repository with configuration for testnet (Pyrmont)**
 
-Not all setups are stable for Mainnet yet. Please review the README.md of the specific setup to get more details on this matter.
+Default is Pyrmont, the long-term testnet for Ethereum 2.0. For running on Mainnet, checkout `mainnet` branch by executing the following commands after `git clone`:
+```
+git checkout mainnet
+```
+Not all setups are available for Mainnet yet.
 
 ## Run a node
 1. Select a docker-compose from the list above.
