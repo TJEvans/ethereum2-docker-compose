@@ -1,7 +1,7 @@
 # log-level is the global log level for Vouch logging.
 log-level: Debug
 
-beacon-node-address: lighthouse_beacon:5052
+beacon-node-address: prysm_beacon:4000
 
 # metrics is the module that logs metrics, in this case using prometheus.
 metrics:
@@ -14,7 +14,7 @@ metrics:
 # graffiti provides graffiti data.  Full details are in the separate document.
 graffiti:
   static:
-    value: stefa2k/ethereum2-docker-compose
+    value: 
 
 # submitter submits data to beacon nodes.  If not present the nodes in beacon-node-address above will be used.
 submitter:
@@ -31,6 +31,16 @@ submitter:
 strategies:
   beaconblockproposal:
     # style can be 'best', which obtains blocks from all nodes and compares them, or 'first', which uses the first returned
+    style: best
+    # beacon-node-addresses are the addresses of beacon nodes to use for this strategy.
+    beacon-node-addresses:
+      - prysm_beacon:4000
+      - prysm_beacon_slasher:4000
+      - teku_beacon:5051
+      - lighthouse_beacon:5052
+  # The attestationdata strategy obtains attestation data from multiple sources.
+  attestationdata:
+    # style can be 'best', which obtains attestations from all nodes and selects the best, or 'first', which uses the first returned
     style: best
     # beacon-node-addresses are the addresses of beacon nodes to use for this strategy.
     beacon-node-addresses:

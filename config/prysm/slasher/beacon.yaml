@@ -10,7 +10,7 @@ accept-terms-of-use: yes
 datadir: /data
 
 #######################
-# Connectivity settings 
+# Connectivity settings
 p2p-host-ip: ""
 p2p-host-dns: ""
 
@@ -32,6 +32,4 @@ http-web3provider: http://geth:8545
 historical-slasher-node: yes
 block-batch-limit: 512
 
-blst: yes
-
-pyrmont: yes
+mainnet: yes
