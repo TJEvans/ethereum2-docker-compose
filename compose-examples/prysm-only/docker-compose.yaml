@@ -8,11 +8,19 @@ x-logging: &logging
       max-size: "100m"
 
 services:
+  stereum-init:
+    image: stereum/init:buster
+    restart: "no"
+    volumes:
+      - ./data/grafana:/mnt/grafana
+    <<: *logging
+
   geth:
     image: ethereum/client-go:${GETH_DOCKER_TAG}
     restart: always
     hostname: geth
-    command: --goerli --rpc --rpcport=8545 --rpcaddr=0.0.0.0 --rpcvhosts="*" --allow-insecure-unlock --rpcapi="db,eth,net,web3,personal"
+    command: --goerli --http --http.port=8545 --http.addr=0.0.0.0 --http.vhosts="*" --allow-insecure-unlock --http.api="db,eth,net,web3,personal"
+    stop_grace_period: 5m
     ports:
       - 30303:30303/tcp
       - 30303:30303/udp
@@ -32,6 +40,10 @@ services:
       - 127.0.0.1:4000:4000
       - 13000:13000/tcp
       - 12000:12000/udp
+    networks:
+      default:
+        aliases:
+          - prysm_beacon_slasher
     volumes:
       - ./config/prysm/slasher/beacon.yaml:/config/beacon.yaml:ro
       - ./data/prysm/beacon-slasher:/data
@@ -44,6 +56,8 @@ services:
     depends_on:
       - beacon
     command: --config-file=/config/validator.yaml
+    ports:   
+      - 127.0.0.1:7500:7500/tcp # web-ui
     volumes:
       - ./config/prysm/validator.yaml:/config/validator.yaml:ro
       - ./data/prysm/validator:/data
@@ -62,7 +76,7 @@ services:
     <<: *logging
 
   prometheus:
-    image: prom/prometheus:v2.19.0
+    image: prom/prometheus:${PROMETHEUS_DOCKER_TAG}
     user: root # https://github.com/prometheus/prometheus/issues/5976
     restart: on-failure
     hostname: prometheus
@@ -70,21 +84,41 @@ services:
     ports:
       - 127.0.0.1:9090:9090
     volumes:
-      - ./config/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml
+      - ./config/prometheus/prometheus-p.yaml:/etc/prometheus/prometheus.yml
       - ./data/prometheus:/prometheus
     <<: *logging
 
   grafana:
-    image: grafana/grafana:7.0.3
+    image: grafana/grafana:${GRAFANA_DOCKER_TAG}
     restart: on-failure
     hostname: grafana
+    user: "2000"
     depends_on:
+      - stereum-init
       - prometheus
+      - renderer
     ports:
       - 127.0.0.1:3000:3000
     volumes:
-      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/provisioning-p:/etc/grafana/provisioning
       - ./data/grafana:/var/lib/grafana
+    environment:
+      GF_RENDERING_SERVER_URL: http://renderer:8082/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000
     <<: *logging
 
+  renderer:
+    image: grafana/grafana-image-renderer:${GRAFANA_IMAGE_RENDERER_TAG}
+    restart: on-failure
+    hostname: renderer
+    environment:
+      ENABLE_METRICS: 'true'
+      HTTP_PORT: 8082
+    <<: *logging
+
+  node-exporter:
+    image: prom/node-exporter:${PROMETHEUS_NODE_EXPORTER_DOCKER_TAG}
+    user: "2000"
+    hostname: node-exporter
+    <<: *logging
 # EOF

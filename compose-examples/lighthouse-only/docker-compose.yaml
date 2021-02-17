@@ -8,10 +8,22 @@ x-logging: &logging
       max-size: "100m"
 
 services:
+  stereum-init:
+    image: stereum/init:buster
+    restart: "no"
+    volumes:
+      - ./data/grafana:/mnt/grafana
+      - ./data/sigmaprime/lighthouse:/mnt/lighthouse
+      - ./data/sigmaprime/slasher:/mnt/slasher
+      - ./wallets:/mnt/wallets
+      - ./data/prometheus:/mnt/prometheus
+    <<: *logging
+
   geth:
     image: ethereum/client-go:${GETH_DOCKER_TAG}
     restart: always
-    command: --goerli --rpc --rpcport=8545 --rpcaddr=0.0.0.0 --rpcvhosts="*" --allow-insecure-unlock --rpcapi="db,eth,net,web3,personal" --pprof --pprofaddr=0.0.0.0 --pprofport=6060 --metrics
+    command: --goerli --http --http.port=8545 --http.addr=0.0.0.0 --http.vhosts="*" --allow-insecure-unlock --http.api="db,eth,net,web3,personal"
+    stop_grace_period: 5m
     ports:
       - 30305:30303/tcp
       - 30305:30303/udp
@@ -20,34 +32,40 @@ services:
     <<: *logging
 
   beacon:
-    image: sigp/lighthouse:${LIGHTHOUSE_DOCKER_TAG}
+    image: stereum/lighthouse:${LIGHTHOUSE_DOCKER_TAG}
+    user: "2000"
+    depends_on:
+      - stereum-init
     volumes:
-      - ./data/sigmaprime/lighthouse:/root/.lighthouse
-      - ./config/lighthouse/start-beacon-node.sh:/root/scripts/start-beacon-node.sh:ro
+      - ./data/sigmaprime/lighthouse:/opt/app/beacon
+      - ./data/sigmaprime/slasher:/opt/app/slasher
     ports:
       - 9000:9000/tcp
       - 9000:9000/udp
-    env_file: ./config/lighthouse/.env
-    command: sh /root/scripts/start-beacon-node.sh
-    restart: on-failure
+    env_file: ./config/lighthouse/beacon.env
+    entrypoint: /opt/app/start/beacon.sh
+    restart: unless-stopped
     <<: *logging
 
   validator:
-    image: sigp/lighthouse:${LIGHTHOUSE_DOCKER_TAG}
-    volumes:
-      - ./config/lighthouse/validator/start-validator-client.sh:/root/scripts/start-validator-client.sh:ro
-      - ./wallets:/root/.lighthouse
+    image: stereum/lighthouse:${LIGHTHOUSE_DOCKER_TAG}
+    user: "2000"
     depends_on:
+      - stereum-init
       - beacon
-    env_file: ./config/lighthouse/validator/.env
-    command: sh /root/scripts/start-validator-client.sh
+    volumes:
+      - ./wallets:/opt/app/validator
+    env_file: ./config/lighthouse/validator.env
+    entrypoint: /opt/app/start/validator.sh
     restart: on-failure
     <<: *logging
 
   prometheus:
-    image: prom/prometheus:v2.21.0
-    user: root # https://github.com/prometheus/prometheus/issues/5976
-    restart: on-failure
+    image: prom/prometheus:${PROMETHEUS_DOCKER_TAG}
+    user: "2000"
+    depends_on:
+      - stereum-init
+    restart: unless-stopped
     hostname: prometheus
     command: --storage.tsdb.retention.time=7d --config.file=/etc/prometheus/prometheus.yml
     ports:
@@ -58,11 +76,13 @@ services:
     <<: *logging
 
   grafana:
-    image: grafana/grafana:7.2.1
-    restart: on-failure
-    hostname: grafana
+    image: grafana/grafana:${GRAFANA_DOCKER_TAG}
+    user: "2000"
     depends_on:
+      - stereum-init
       - prometheus
+    restart: unless-stopped
+    hostname: grafana
     ports:
       - 127.0.0.1:3002:3000
     volumes:

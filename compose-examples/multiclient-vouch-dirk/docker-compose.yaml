@@ -8,11 +8,21 @@ x-logging: &logging
       max-size: "100m"
 
 services:
+  stereum-init:
+    image: stereum/init:buster
+    restart: "no"
+    volumes:
+      - ./data/grafana:/mnt/grafana
+      - ./data/sigmaprime/lighthouse:/mnt/lighthouse
+      - ./data/sigmaprime/slasher:/mnt/slasher
+    <<: *logging
+
   geth:
     container_name: geth
     image: ethereum/client-go:${GETH_DOCKER_TAG}
     restart: unless-stopped
     command: --goerli --http --http.port=8545 --http.addr=0.0.0.0 --http.vhosts="*" --allow-insecure-unlock --http.api="db,eth,net,web3,personal"
+    stop_grace_period: 5m
     ports:
       - 30303:30303/tcp
       - 30303:30303/udp
@@ -35,6 +45,7 @@ services:
       - ./data/prysm/beacon:/data
     ports:
       - ${BEACON_API_IP}:4000:4000
+      - ${BEACON_API_IP}:8900:8080
       - 13000:13000/tcp
       - 12000:12000/udp
     networks:
@@ -52,6 +63,7 @@ services:
       - ./data/prysm/beacon-slasher:/data
     ports:
       - ${BEACON_API_IP}:4001:4000
+      - ${BEACON_API_IP}:8901:8080
       - 13001:13000/tcp
       - 12001:12000/udp
     networks:
@@ -71,22 +83,27 @@ services:
     volumes:
       - ./config/prysm/slasher/slasher.yaml:/config/slasher.yaml:ro
       - ./data/prysm/slasher:/data
+    ports:
+      - ${BEACON_API_IP}:8902:8680
     networks:
       - n_slasher_beacon
     <<: *logging
 
   lighthouse_beacon:
     container_name: lighthouse_beacon
-    image: sigp/lighthouse:${LIGHTHOUSE_DOCKER_TAG}
+    image: stereum/lighthouse:${LIGHTHOUSE_DOCKER_TAG}
+    user: "2000"
+    depends_on:
+      - stereum-init
     restart: unless-stopped
-    command: sh /root/scripts/start-beacon-node.sh
-    env_file: ./config/lighthouse/.env
+    env_file: ./config/lighthouse/beacon.env
+    entrypoint: /opt/app/start/beacon.sh
     volumes:
-      - ./config/lighthouse/start-beacon-node.sh:/root/scripts/start-beacon-node.sh:ro
-      - ./data/sigmaprime/lighthouse:/root/.lighthouse
-      - ./data/sigmaprime/lighthouse-network:/root/network
+      - ./data/sigmaprime/lighthouse:/opt/app/beacon
+      - ./data/sigmaprime/slasher:/opt/app/slasher
     ports:
       - ${BEACON_API_IP}:5052:5052/tcp
+      - ${BEACON_API_IP}:8910:5054
       - 9000:9000/tcp
       - 9000:9000/udp
     networks:
@@ -103,12 +120,13 @@ services:
     environment:
       - "JAVA_OPTS=-Xmx8g"
     volumes:
-      - ./config/teku/beacon.yaml:/opt/teku/beacon.yaml:ro
+      - ./config/teku/beacon-mc.yaml:/opt/teku/beacon.yaml:ro
       - ./data/consensys/teku:/opt/teku/data
     ports:
+      - ${BEACON_API_IP}:5051:5051/tcp
+      - ${BEACON_API_IP}:8920:8008
       - 9001:9001/tcp
       - 9001:9001/udp
-      - ${BEACON_API_IP}:5051:5051/tcp
     networks:
       - n_vouch_beacons
       - n_bridge
@@ -164,7 +182,9 @@ services:
     image: grafana/grafana:${GRAFANA_DOCKER_TAG}
     restart: unless-stopped
     hostname: grafana
+    user: "2000"
     depends_on:
+      - stereum-init
       - prometheus
     ports:
       - 127.0.0.1:3000:3000
